@@ -74,21 +74,36 @@ extern display_module * display_modules[];
 class display: public module {
   public:
     display(const char * id, Adafruit_GFX& g): module(id), gfx(g) {
-      nextflush = millis();
+      nextflush = millis(); // render immediately
+      dm = -1; // no current module
     };
     // standard Arduino setup and loop, called from ModuleHelper
     virtual void setup(void) {}; // for module.h
     virtual void loop(unsigned long& ms) {
       // by default, only update display every 100ms
-      if(ms >= nextflush) {
-        uint8_t i;
-        for(i = 0; display_modules[i]; i++) {
-          if(&(display_modules[i]->d) == this) {
-            display_modules[i]->loop(ms);
+      // dm is the last module index which was updated
+      if(dm >= 0 || ms >= nextflush) {
+        //Serial.print("foo "); Serial.println(dm);
+        if(dm < 0) {
+          dm = 0;
+          clear();
+        } else dm++;
+        // find next our module
+        for(;;) {
+          if(!display_modules[dm]) {
+            // no more modules
+            flush(); // render display
+            dm = -1;
+            nextflush = ms + DISPLAY_INTERVAL;
+            return;
           }
+          if(&(display_modules[dm]->d) == this) {
+            // if this is our module, run it
+            display_modules[dm]->loop(ms);
+            return;
+          }
+          dm++;
         }
-        flush();
-        nextflush = ms + DISPLAY_INTERVAL;
       }
     };
     
@@ -104,6 +119,7 @@ class display: public module {
     virtual void clear(void) {gfx.fillRect(0, 0, gfx.width(), gfx.height(), 0);}; // default clear - write white to entire area
     Adafruit_GFX& gfx;
     unsigned long nextflush;
+    int16_t dm;
 };
 
 #ifdef _ADAFRUIT_PCD8544_H
@@ -122,7 +138,7 @@ class display_pcd8544: public display {
       priv.begin();
       // FIXME - read from config
       // FIXME - add UI to adjust
-      priv.setContrast(40);
+      priv.setContrast(60);
       priv.clearDisplay();   // clears the screen and buffer
     }
     void flush(void) {priv.display();};
@@ -141,7 +157,7 @@ class number_display: public display_module {
     number_display(display& d, float& p, const char * txt, int16_t x, int16_t y): display_module(txt, d), p(p), txt(txt), x(x), y(y){};
     void setup(void) {};
     void loop(unsigned long& ms) {
-      d.gfx.fillRect(x, y, d.gfx.width(), 8, 0);
+      //d.gfx.fillRect(x, y, d.gfx.width(), 8, 0);
       d.gfx.setCursor(x, y);
       d.gfx.print(txt);
       d.gfx.print(" ");

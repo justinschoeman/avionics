@@ -122,12 +122,13 @@ display * displays[] = {
  */
 #include "pressure_bmp180.h"
 #include "pressure_tools.h"
-#include "gyro_bno055_comp.h"
+#include "gyro_bno055_comp3.h"
 #include "gyro_tools.h"
 module * modules[] = {
   //new pressure_bmp180("Ppt", inst.p_pitot, W2),
   //new pressure_bmp180("Pst", inst.p_static),
   new gyro_bno055("GY0", inst.agyro, inst.gyro, inst.compass, inst.slip, BNO055_ADDRESS_B),
+  //new gyro_bno055("G21", inst.agyro, inst.gyro, inst.compass, inst.slip, BNO055_ADDRESS_B, BNO055_ADDRESS_A),
   //new altitude("Alt", inst.p_static, inst.qnh, inst.alt),
   //new vsi("VSI", inst.alt, inst.vsi),
   //new asi("ASI", inst.p_pitot, inst.p_static, inst.asi),
@@ -145,17 +146,17 @@ module * modules[] = {
  * 
  */
 display_module * display_modules[] = {
-  new number_display(*displays[0], inst.p_pitot.value, "PIT", 0, 0),
-  new number_display(*displays[0], inst.p_static.value, "STA", 0, 8),
-  new number_display(*displays[0], inst.qnh.value, "QNH", 0, 16),
-  new number_display(*displays[0], inst.alt.value, "ALT", 0, 24),
+  //new number_display(*displays[0], inst.p_pitot.value, "PIT", 0, 0),
+  //new number_display(*displays[0], inst.p_static.value, "STA", 0, 8),
+  //new number_display(*displays[0], inst.qnh.value, "QNH", 0, 16),
+  //new number_display(*displays[0], inst.alt.value, "ALT", 0, 24),
   //new number_display(*displays[0], inst.gyro.pitch, "GP", 0, 0),
   //new number_display(*displays[0], inst.agyro.pitch, "AP", 0, 8),
   //new number_display(*displays[0], inst.gyro.roll, "GR", 0, 16),
   //new number_display(*displays[0], inst.agyro.roll, "AR", 0, 24),
   //new number_display(*displays[0], inst.compass.value, "CT", 0, 24),
-  new number_display(*displays[0], inst.vsi.value, "VSI", 0, 32),
-  new number_display(*displays[0], inst.asi.value, "ASI", 0, 40),
+  //new number_display(*displays[0], inst.vsi.value, "VSI", 0, 32),
+  //new number_display(*displays[0], inst.asi.value, "ASI", 0, 40),
   new simple_ah(*displays[0], inst.gyro, "AH", 84-48, 0, 47, 47),
   new simple_ah(*displays[0], inst.agyro, "AHA", 0, 0, 47, 47),
   NULL  

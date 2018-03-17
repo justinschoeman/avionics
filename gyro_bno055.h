@@ -50,7 +50,6 @@ class gyro_bno055: public module {
        
        if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF_FMC_OFF)) {
          dbgln(F("Ooops, no BNO055 detected"));
-         delay(5000);
          state = 0;
          nextT = millis() + BNO055_TIME_REINIT;
          return;
@@ -121,20 +120,13 @@ class gyro_bno055: public module {
   private:
     void restore_cal(void) {
       uint8_t caldata[NUM_BNO055_OFFSET_REGISTERS];
-      uint8_t i;
       
       CFG.fetch(id, NUM_BNO055_OFFSET_REGISTERS);
       CFG.read(0, caldata, NUM_BNO055_OFFSET_REGISTERS);
-      for(i = 0; i < NUM_BNO055_OFFSET_REGISTERS; i++) {
-        if(caldata[i] != 255) {
-          i = 0;
-          break;
-        }
-      }
-      if(!i) {
+      if(!CFG.uninit) {
         // have valid cal data
         bno.setSensorOffsets(caldata);
-        //dbgln(F("GOTCALDATA"));
+        dbgln(F("GOTCALDATA"));
         //delay(10000);
       }
    };

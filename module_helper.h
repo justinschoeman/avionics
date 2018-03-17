@@ -80,6 +80,13 @@ class ModuleHelper {
       // run one display per tick
       displays[dc]->loop(ms);
       if(!displays[++dc]) dc = 0;
+
+#if 0
+      if(millis() > ms) {
+        //Serial.print(" ");
+        Serial.println(millis() - ms);
+      }
+#endif
     };
   
   private:

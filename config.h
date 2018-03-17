@@ -88,9 +88,20 @@ class config {
           if(len != l) {
             // fixme - need some sort of assert
             Serial.println(F("EEPROM CORRUPT"));
+            Serial.println(id);
             while(1) {}
           }
           // length matches
+          // test init status?
+          uninit = true;
+          for(l = 0; l < len; l++) {
+            if(EEPROM[base + l] != 255) {
+              dbgln(F("eeprom already set"));
+              uninit = false;
+              return;
+            }
+          }
+          dbgln(F("eeprom not init"));
           return;
         }
         // did not match
@@ -110,6 +121,7 @@ class config {
           EEPROM[base++] = l;
           for(len = 0; len < l; len++) EEPROM.update(base + len, (uint8_t)255); // all newly allocated space is FF
           EEPROM[base + len] = 0; // 0 next header - empty id
+          uninit = true;
           return;
         }
         base += len; // lext header
@@ -145,6 +157,8 @@ class config {
       }
       for(i = 0; i < l; i++) EEPROM.update(base + o + i, b[i]);
     };
+
+    bool uninit;
 
   private:
     bool compare_id(const char * id) {
