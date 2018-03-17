@@ -25,7 +25,34 @@
 /*
  * VERSION 3 UPDATE
  * 
+ * OK, tried a version with two BNO055's rotated 180 degrees, on the assumption
+ * that some of the non-linearities would cancel out. Surprisingly enough, it made
+ * things worse... A little fiddling showed that even the smallest misalignment 
+ * between the IMUs causes nasty cross-axis errors...
+ * 
+ * That also showed that the dependencies in the rotation calculations where adding 
+ * to the error, and these errors were then integrated, at which point things went
+ * really pear shaped.
+ * 
+ * So I changed it to a quaternion based solution (which was a fun learning experience
+ * on its own), so there we reduce transformations - especially ones sensitive to noise.
+ * 
+ * Final result is a lot simpler and more compact.  The gyros still lose sync 
+ * occasionally, but results are a lot better.
+ * 
+ * The only problem is calculating the gravity quaternion - the method I use gives a 
+ * random raw component, so the complementary filter ruins the gyro's yaw value. Not
+ * an issue now, but I want to use this for a compass too.
+ * 
+ * Browsing for solutions, I found this:
+ * 
  * http://www.mdpi.com/1424-8220/15/8/19302/pdf
+ * 
+ * And this solution is already half way there.  Will try using thos gravity conversions
+ * next...
+ * 
+ * Also added a 1000s time constant high pass filter on the gyros, which has removed 
+ * drift, and tuned the other filters.  Results are looking quite good so far!
  * 
  * OLD NOTES:
  * 
@@ -96,104 +123,7 @@
 #include <Adafruit_BNO055.h>
 
 #include "module.h"
-
-class quaternion {
-  public:
-    quaternion(void): Vmag(-1), V{0,0,0,0} {};
-    quaternion(float w, float x, float y, float z): Vmag(-1), V{w,x,y,z} {};
-    quaternion(float x, float y, float z): Vmag(-1), V{0,x,y,z} {};
-    
-    float mag(void) {
-      float t;
-      char i;
-      t = 0;
-      for(i = 0; i < 4; i++)
-        t += V[i] * V[i];
-      Vmag = sqrt(t);
-      return Vmag;
-    }
-
-    float norm(void) {
-      float t;
-      char i;
-      t = mag();
-      for(i = 0; i < 4; i++)
-        V[i] /= t;
-      return t;
-    }
-
-    // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-    float pitch(void) {
-      //float sinp = +2.0 * (q.w() * q.y() - q.z() * q.x());
-      float sinp = +2.0 * (V[0] * V[2] - V[3] * V[1]);
-      if (fabs(sinp) >= 1)
-        return copysign(M_PI / 2, sinp); // use 90 degrees if out of range
-      else
-        return asin(sinp);
-    }
-
-    float roll(void) {
-      //float sinr = +2.0 * (q.w() * q.x() + q.y() * q.z());
-      float sinr = +2.0 * (V[0] * V[1] + V[2] * V[3]);
-      //float cosr = +1.0 - 2.0 * (q.x() * q.x() + q.y() * q.y());
-      float cosr = +1.0 - 2.0 * (V[1] * V[1] + V[2] * V[2]);
-      return atan2(sinr, cosr);
-    }
-
-    quaternion operator*(const quaternion& q) {
-      quaternion o;
-      o[0] = V[0]*q[0]-V[1]*q[1]-V[2]*q[2]-V[3]*q[3];
-      o[1] = V[0]*q[1]+V[1]*q[0]+V[2]*q[3]-V[3]*q[2];
-      o[2] = V[0]*q[2]-V[1]*q[3]+V[2]*q[0]+V[3]*q[1];
-      o[3] = V[0]*q[3]+V[1]*q[2]-V[2]*q[1]+V[3]*q[0];
-
-      return o;
-    }
-  
-    quaternion operator*(const float& f) {
-      quaternion o;
-      char i;
-      for(i = 0; i < 4; i++)
-        o[i] = V[i] * f;
-      return o;
-    }
-  
-    quaternion& operator*=(const float& f) {
-      char i;
-      for(i = 0; i < 4; i++)
-        V[i] *= f;
-      return *this;
-    }
-  
-    quaternion operator+(const quaternion& q) {
-      quaternion o;
-      char i;
-      for(i = 0; i < 4; i++)
-        o.V[i] = V[i] + q[i];
-      return o;
-    }
-
-    float& operator[](const int& i) {
-      return V[i];
-    }
-
-    const float& operator[](const int& i) const { // need this too when dereferencing const class objects above
-      return V[i];
-    }
-
-    void dump(void) {
-#ifdef _DEBUG
-      char i;
-      for(i = 0; i < 4; i++) {
-        dbg(V[i]);
-        dbg(" ");
-      }
-      dbgln(" ");
-#endif
-    }
-    float V[4];
-    float Vmag;
-};
+#include "quaternion.h"
 
 class gyro_bno055: public module {
   public:
@@ -248,12 +178,15 @@ class gyro_bno055: public module {
         // get gyro vector
         V = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE); // grab gyros
   
-        // xxx calculate delta T (consistently use timestamp immediately after read - should be representative)
-        // changed - always use 100Hz - as that is the rate at which the BNO is producing updated samples (even if we have some jitter when reading them)
+        // delta T - always use 100Hz - as that is the rate at which the BNO is producing updated samples (even if we have some jitter when reading them)
         const float dt = BNO055_TIME_POLL/1000.0;
 
-        // quaternian integration of angular velocity vector
+        // quaternian integration of angular velocity vector (roll all constant multiplications into one at the end)
+        // https://stackoverflow.com/questions/46908345/integrate-angular-velocity-as-quaternion-rotation
+        // this is a small deltaT approximation!
         qW = quaternion(V.x(), V.y(), V.z());  // * (M_PI/180);
+        qGL.avg(qW, 100000.0);
+        qW -= qGL;
         qG = qG + qG * qW * ((dt*M_PI)/360);  //(dt/2);
         qG.norm();
   
@@ -265,9 +198,7 @@ class gyro_bno055: public module {
           qT = quaternion(V.x(), V.y(), V.z());
           Amag = qT.mag();
         } else {
-          qT[1] = (qT[1] * BNO_ALPHA_ACCEL + V.x()) / (BNO_ALPHA_ACCEL + 1);
-          qT[2] = (qT[2] * BNO_ALPHA_ACCEL + V.y()) / (BNO_ALPHA_ACCEL + 1);
-          qT[3] = (qT[3] * BNO_ALPHA_ACCEL + V.z()) / (BNO_ALPHA_ACCEL + 1);
+          qT.avg(quaternion(V.x(), V.y(), V.z()), BNO_ALPHA_ACCEL);
         }
         //qT.dump();
 
@@ -275,10 +206,12 @@ class gyro_bno055: public module {
         if(state == 1) {
           // record average average gravity // gets qT magnitude, so this is cached in the object from here
           Amag = (Amag * GYRO_DNO_ACCEL_ALPHA + qT.mag()) / (GYRO_DNO_ACCEL_ALPHA + 1.0);
+          // convenient 10ms dump
+          qGL.dump();
         }
   
-        // state 1 == get Acceleration vector
-        if(state == 1) {
+        // state 2 == get Acceleration quaternion
+        if(state == 2) {
           // produce a quaternion describing the rotation from vertical to the average accelerometer value
           //https://stackoverflow.com/questions/1171849/finding-quaternion-representing-the-rotation-from-one-vector-to-another
           // Half Way quaternion solution - hard coded for rotation to vertical
@@ -427,11 +360,12 @@ class gyro_bno055: public module {
     //unsigned long gyroT
 
     imu::Vector<3> V;
-    quaternion qA;// = quaternion(0);
-    float Amag; //= 9.8; // acceleration magnitude m.s-2
-    quaternion qG;// = quaternion(0);
-    quaternion qW;// = quaternion(0);
-    quaternion qT;// = quaternion(0, 0, 9.8);
+    quaternion qA;
+    float Amag;
+    quaternion qG;
+    quaternion qGL; // extremely long term average
+    quaternion qW;
+    quaternion qT;
 };
 
 #endif

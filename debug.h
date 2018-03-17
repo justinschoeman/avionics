@@ -25,7 +25,7 @@
 #include "display_helper.h"
 
 // comment out the following line to remove all debugging
-//#define _DEBUG
+#define _DEBUG
 
 /*
  * dbgi(x) - set debug target object (anything that inherits from the Print class) - object must already be initialised/started
